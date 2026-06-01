@@ -1,0 +1,64 @@
+services:
+
+  redis:
+    image: redis:7-alpine
+    container_name: hrbot_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: hrbot_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=hrbot
+      - POSTGRES_PASSWORD=hrbot
+      - POSTGRES_DB=hrbot
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hrbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  hrbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hrbot_app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - MCP_TRANSPORT=direct
+      - POLICIES_DIR=docs/policies
+      - DATABASE_URL=postgresql+asyncpg://hrbot:hrbot@postgres:5432/hrbot
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./docs:/app/docs
+
+volumes:
+  redis_data:
+  pg_data:
